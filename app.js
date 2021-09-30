@@ -65,6 +65,9 @@ const revomeWaterMask = async (ctx) => {
   
 }
 
+router.get('/', async ctx => {
+  ctx.body = '200'
+})
 router.post('/watermask', revomeWaterMask)
 router.get('/video', async (ctx) => {
   const res = await axios({
