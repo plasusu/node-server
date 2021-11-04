@@ -6,16 +6,21 @@ const app = new Koa();
 
 const router = new koaRouter()
 
-
 const getLocationUrl = async (originUrl) => {
   try {
-    await axios({
+    const res = await axios({
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 12_1_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/16D57 Version/12.0 Safari/604.1'
+      },
       url: originUrl,
       maxRedirects: 0,
       timeout: 1000,
     })
+
+    if (res && res.status === 200) {
+      return originUrl
+    }
   } catch(err) {
-    console.log(err)
     if (err && err.response && err.response.status === 302) {
       return err.response.headers.location
     } else {
@@ -34,15 +39,10 @@ const getItemId = (url) => {
   return null
 }
 
-
-
-// 云函数入口函数
 const revomeWaterMask = async (ctx) => {
   try {
-    console.log(ctx.request.body)
     const url = await getLocationUrl(ctx.request.body.url)
     const itemId = getItemId(url)
-    console.log(url)
 
     const { data: videoJson } = await axios(`https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=${itemId}`);
     
@@ -51,7 +51,6 @@ const revomeWaterMask = async (ctx) => {
     const shareTitle = videoJson.item_list[0].share_info.share_title;
     const coverImg = videoJson.item_list[0].video.cover.url_list[0];
     const videoUrl = await getLocationUrl(urlList[0].replace('playwm', 'play'))
-    console.log(urlList[0], shareTitle, coverImg)
     ctx.body = {
       videoUrl,
       videoTitle: shareTitle,
@@ -65,10 +64,45 @@ const revomeWaterMask = async (ctx) => {
   
 }
 
-router.get('/', async ctx => {
-  ctx.body = '200'
-})
+const ksParse = async (ctx) => {
+  try {
+    const url = await getLocationUrl(ctx.request.body.url)
+  
+    const res = await axios({
+      url,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 12_1_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/16D57 Version/12.0 Safari/604.1'
+      },
+    })
+
+    const html = res.data
+
+    const regVideo = /\"srcNoMark\"\:\"(http.+?)\"/
+    const regCover = /\"poster\"\:\"(http.+?)\"/
+    const regTitle = /\"caption\"\:\"(.+?)\"/
+
+
+    const videoUrl = html.match(regVideo)[1]
+    const coverImg = html.match(regCover)[1]
+    const videoTitle = html.match(regTitle)[1]
+    
+    
+    ctx.body = {
+      videoUrl,
+      videoTitle,
+      coverImg,
+    }
+  } catch(e) {
+    ctx.body = {
+      message: '解析失败'
+    }
+  }
+  
+}
+
+// 两个api
 router.post('/watermask', revomeWaterMask)
+router.post('/ksParse', ksParse)
 router.get('/video', async (ctx) => {
   const res = await axios({
     url: ctx.query.url,
@@ -79,6 +113,9 @@ router.get('/video', async (ctx) => {
   ctx.set('Content-Length', res.headers['content-length'])
   
   ctx.body = res.data
+})
+router.get('/', async ctx => {
+  ctx.body = '200'
 })
 
 app.use(koaBody())
